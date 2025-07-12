@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, MapPin, Search, AlertTriangle, CheckCircle, X, Plus, Minus } from 'lucide-react';
+import { ShoppingCart, MapPin, Search, AlertTriangle, CheckCircle, X, Plus, Minus, TrendingDown } from 'lucide-react';
 
 // Mock product data
 const mockProducts = [
@@ -19,7 +19,7 @@ function SmartCartApp() {
   const [budget, setBudget] = useState(1000);
   const [cart, setCart] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showSuggestion, setShowSuggestion] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
   const [currentStep, setCurrentStep] = useState('budget'); // budget, shopping, summary
   const [highlightedAisle, setHighlightedAisle] = useState(null);
 
@@ -43,11 +43,14 @@ function SmartCartApp() {
     const alternative = suggestAlternative(product);
     
     if (alternative && cartTotal + product.price > budget * 0.8) {
-      setShowSuggestion({
+      // Add suggestion to the suggestions array instead of showing popup
+      const newSuggestion = {
+        id: Date.now(),
         original: product,
         alternative: alternative,
         savings: product.price - alternative.price
-      });
+      };
+      setSuggestions(prev => [...prev, newSuggestion]);
       setHighlightedAisle(alternative.location.aisle);
       return;
     }
@@ -65,27 +68,38 @@ function SmartCartApp() {
   };
 
   // Handle suggestion response
-  const handleSuggestion = (accept) => {
+  const handleSuggestion = (suggestionId, accept) => {
+    const suggestion = suggestions.find(s => s.id === suggestionId);
+    if (!suggestion) return;
+
     if (accept) {
       const alternativeWithOriginal = {
-        ...showSuggestion.alternative,
+        ...suggestion.alternative,
         quantity: 1,
-        originalPrice: showSuggestion.original.price
+        originalPrice: suggestion.original.price
       };
       setCart([...cart, alternativeWithOriginal]);
     } else {
-      const existingItem = cart.find(item => item.id === showSuggestion.original.id);
+      const existingItem = cart.find(item => item.id === suggestion.original.id);
       if (existingItem) {
         setCart(cart.map(item => 
-          item.id === showSuggestion.original.id 
+          item.id === suggestion.original.id 
             ? { ...item, quantity: item.quantity + 1 }
             : item
         ));
       } else {
-        setCart([...cart, { ...showSuggestion.original, quantity: 1 }]);
+        setCart([...cart, { ...suggestion.original, quantity: 1 }]);
       }
     }
-    setShowSuggestion(null);
+    
+    // Remove the suggestion from the list
+    setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+    setHighlightedAisle(null);
+  };
+
+  // Dismiss suggestion
+  const dismissSuggestion = (suggestionId) => {
+    setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
     setHighlightedAisle(null);
   };
 
@@ -213,6 +227,72 @@ function SmartCartApp() {
 
           {/* Cart & Map Section */}
           <div className="space-y-6">
+            {/* Smart Suggestions */}
+            {suggestions.length > 0 && (
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="flex items-center mb-4">
+                  <TrendingDown className="text-green-600 mr-2" size={20} />
+                  <h2 className="text-lg font-semibold text-gray-800">Smart Suggestions</h2>
+                </div>
+                
+                <div className="space-y-4">
+                  {suggestions.map(suggestion => (
+                    <div key={suggestion.id} className="border border-orange-200 rounded-lg p-4 bg-orange-50">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center">
+                          <AlertTriangle className="text-orange-500 mr-2" size={16} />
+                          <span className="text-sm font-medium text-orange-800">Better Option Available!</span>
+                        </div>
+                        <button
+                          onClick={() => dismissSuggestion(suggestion.id)}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-2 mb-3">
+                        <div className="flex justify-between items-center p-2 bg-red-100 rounded">
+                          <span className="text-sm text-gray-700">{suggestion.original.name}</span>
+                          <span className="text-sm font-medium text-red-600">₹{suggestion.original.price}</span>
+                        </div>
+                        
+                        <div className="flex justify-between items-center p-2 bg-green-100 rounded">
+                          <span className="text-sm text-gray-700">{suggestion.alternative.name}</span>
+                          <span className="text-sm font-medium text-green-600">₹{suggestion.alternative.price}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm text-green-700 font-medium">
+                          💰 Save ₹{suggestion.savings}!
+                        </span>
+                        <span className="text-xs text-gray-600">
+                          Aisle {suggestion.alternative.location.aisle}, Shelf {suggestion.alternative.location.shelf}
+                        </span>
+                      </div>
+                      
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleSuggestion(suggestion.id, true)}
+                          className="flex-1 bg-green-600 text-white py-2 px-3 rounded text-sm font-medium hover:bg-green-700 transition-colors flex items-center justify-center"
+                        >
+                          <CheckCircle size={14} className="mr-1" />
+                          Switch & Save
+                        </button>
+                        <button
+                          onClick={() => handleSuggestion(suggestion.id, false)}
+                          className="flex-1 bg-gray-600 text-white py-2 px-3 rounded text-sm font-medium hover:bg-gray-700 transition-colors"
+                        >
+                          Keep Original
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Cart */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-lg font-semibold text-gray-800 mb-4">Your Cart</h2>
@@ -322,69 +402,6 @@ function SmartCartApp() {
           </div>
         </div>
       </div>
-
-      {/* Suggestion Popup */}
-      {showSuggestion && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
-            <div className="flex items-center mb-4">
-              <AlertTriangle className="text-orange-500 mr-2" size={24} />
-              <h3 className="text-lg font-semibold text-gray-800">Smart Suggestion</h3>
-            </div>
-            
-            <div className="mb-6">
-              <p className="text-gray-700 mb-4">
-                Save money by switching to a cheaper alternative!
-              </p>
-              
-              <div className="space-y-3">
-                <div className="flex justify-between items-center p-3 bg-red-50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-gray-800">{showSuggestion.original.name}</p>
-                    <p className="text-sm text-gray-600">
-                      Aisle {showSuggestion.original.location.aisle}, Shelf {showSuggestion.original.location.shelf}
-                    </p>
-                  </div>
-                  <span className="font-bold text-red-600">₹{showSuggestion.original.price}</span>
-                </div>
-                
-                <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-gray-800">{showSuggestion.alternative.name}</p>
-                    <p className="text-sm text-gray-600">
-                      Aisle {showSuggestion.alternative.location.aisle}, Shelf {showSuggestion.alternative.location.shelf}
-                    </p>
-                  </div>
-                  <span className="font-bold text-green-600">₹{showSuggestion.alternative.price}</span>
-                </div>
-              </div>
-              
-              <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                <p className="text-blue-800 font-medium">
-                  💰 Save ₹{showSuggestion.savings} by switching!
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex space-x-3">
-              <button
-                onClick={() => handleSuggestion(true)}
-                className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center"
-              >
-                <CheckCircle size={16} className="mr-2" />
-                Switch & Save
-              </button>
-              <button
-                onClick={() => handleSuggestion(false)}
-                className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-gray-700 transition-colors flex items-center justify-center"
-              >
-                <X size={16} className="mr-2" />
-                Keep Original
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
